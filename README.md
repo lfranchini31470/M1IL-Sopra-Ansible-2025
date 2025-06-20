@@ -139,7 +139,7 @@ Mot de passe sudo : `student`
   sudo systemctl restart grafana-server
   ```
 
-- **Prometheus inaccessible ?**
+- **Prometheus inaccessible ?** 
   ```bash
   sudo ss -tulpn | grep 9090
   ```
