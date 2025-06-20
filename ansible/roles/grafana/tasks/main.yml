@@ -1,0 +1,144 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for grafana
+
+# 1. Transposer la commande sudo apt-get install -y 
+#    apt-transport-https software-properties-common wget
+- name: Install required packages
+  ansible.builtin.apt:
+    name: 
+      - apt-transport-https
+      - software-properties-common
+      - wget
+      - acl
+    state: present
+
+# 2. Create folder | sudo mkdir -p /etc/apt/keyrings/
+- name: Create folder /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    recurse: true
+
+# 3. wget -q -O - https://apt.grafana.com/gpg.key 
+#   | gpg --dearmor |
+#   sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+- name: Add Grafana APT Key
+  ansible.builtin.apt_key:
+    url: https://apt.grafana.com/gpg.key
+    keyring: /etc/apt/keyrings/grafana.gpg
+
+# echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] 
+# https://apt.grafana.com stable main" | sudo 
+# tee -a /etc/apt/sources.list.d/grafana.list
+
+- name: Add specified repository into sources list
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main
+    state: present
+
+# sudo apt-get update
+- name: Update all packages to their latest version
+  ansible.builtin.apt:
+    name: "*"
+    state: latest
+    cache_valid_time: 3600
+
+# sudo apt-get update grafana
+- name: Install Grafana on server
+  ansible.builtin.apt:
+    name: grafana
+    state: present
+
+# sudo systemctl daemon-reload
+# sudo systemctl start grafana-server
+- name: Reload daemons
+  ansible.builtin.systemd_service:
+    name: grafana-server
+    daemon_reload: true
+    state: started
+
+
+# Provisionner la datasource Loki
+- name: Créer le dossier de provisioning des datasources Grafana
+  file:
+    path: /etc/grafana/provisioning/datasources
+    state: directory
+    mode: '0755'
+
+- name: Provisionner la datasource Loki
+  copy:
+    dest: /etc/grafana/provisioning/datasources/loki.yaml
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://localhost:3100
+          isDefault: true
+
+# Provisionner un dashboard pour les logs
+- name: Créer le dossier de provisioning des dashboards Grafana
+  file:
+    path: /etc/grafana/provisioning/dashboards
+    state: directory
+    mode: '0755'
+
+- name: Provisionner la configuration du dashboard
+  copy:
+    dest: /etc/grafana/provisioning/dashboards/logs-dashboard.yaml
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'logs'
+          orgId: 1
+          folder: ''
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards
+
+- name: Créer le dossier contenant les JSON des dashboards
+  file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    mode: '0755'
+
+- name: Ajouter le dashboard logs système
+  copy:
+    dest: /var/lib/grafana/dashboards/system-logs.json
+    content: |
+      {
+        "dashboard": {
+          "id": null,
+          "uid": "system-logs",
+          "title": "System Logs (/var/log)",
+          "timezone": "browser",
+          "panels": [
+            {
+              "type": "logs",
+              "title": "Logs système",
+              "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+              "datasource": "Loki",
+              "targets": [
+                {
+                  "expr": "{job=\"varlogs\"}",
+                  "refId": "A"
+                }
+              ]
+            }
+          ],
+          "schemaVersion": 36,
+          "version": 1
+        },
+        "overwrite": true
+      }
+
+- name: Redémarrer Grafana pour recharger les dashboards
+  systemd:
+    name: grafana-server
+    state: restarted
+
+- name: Display how to connect to the Grafana server instance
+  ansible.builtin.debug:
+    msg: "Connect at http://{{ external_ip }}:3000"

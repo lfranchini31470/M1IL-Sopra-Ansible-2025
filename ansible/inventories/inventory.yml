@@ -1,0 +1,6 @@
+local: # -> Groupe
+  hosts: # -> Liste des hosts du groupe local
+    home: # -> Définition du host home
+  vars: # -> Dictionnaire de variables du groupe local
+    ansible_connection: local # -> Connexion local permettant d'éviter de se connecter via SSH
+    external_ip: 52.212.198.230

@@ -1,0 +1,61 @@
+- name: Installer unzip pour Promtail
+  apt:
+    name: unzip
+    state: present
+
+- name: Télécharger Promtail
+  get_url:
+    url: https://github.com/grafana/loki/releases/download/v2.9.4/promtail-linux-amd64.zip
+    dest: /tmp/promtail.zip
+
+- name: Extraire Promtail
+  unarchive:
+    src: /tmp/promtail.zip
+    dest: /usr/local/bin/
+    remote_src: yes
+
+- name: Rendre Promtail exécutable
+  file:
+    path: /usr/local/bin/promtail-linux-amd64
+    mode: '0755'
+
+- name: Créer le fichier de configuration Promtail
+  copy:
+    dest: /etc/promtail-config.yaml
+    content: |
+      server:
+        http_listen_port: 9080
+        grpc_listen_port: 0
+      positions:
+        filename: /tmp/positions.yaml
+      clients:
+        - url: http://localhost:3100/loki/api/v1/push
+      scrape_configs:
+        - job_name: system
+          static_configs:
+            - targets:
+                - localhost
+              labels:
+                job: varlogs
+                __path__: /var/log/*.log
+
+- name: Créer le service systemd pour Promtail
+  copy:
+    dest: /etc/systemd/system/promtail.service
+    content: |
+      [Unit]
+      Description=Promtail
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/local/bin/promtail-linux-amd64 -config.file=/etc/promtail-config.yaml
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Démarrer et activer Promtail
+  systemd:
+    name: promtail
+    enabled: true
+    state: started
